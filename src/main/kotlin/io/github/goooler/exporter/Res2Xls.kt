@@ -18,15 +18,20 @@ import org.jdom2.input.SAXBuilder
 fun res2xls(inputPath: String, outputPath: String) {
   val workbook = HSSFWorkbook()
   val stringSheet = workbook.createSheet(StringRes.TAG).apply {
-    createRow(0).createCell(0).setCellValue("key")
+    val firstRow = createRow(0)
+    firstRow.createCell(0).setCellValue("key")
+    firstRow.createCell(1).setCellValue("translatable")
   }
   val pluralsSheet = workbook.createSheet(PluralsRes.TAG).apply {
     val firstRow = createRow(0)
     firstRow.createCell(0).setCellValue("key")
-    firstRow.createCell(1).setCellValue("quantity")
+    firstRow.createCell(1).setCellValue("translatable")
+    firstRow.createCell(2).setCellValue("quantity")
   }
   val arraySheet = workbook.createSheet(ArrayRes.TAG).apply {
-    createRow(0).createCell(0).setCellValue("key")
+    val firstRow = createRow(0)
+    firstRow.createCell(0).setCellValue("key")
+    firstRow.createCell(1).setCellValue("translatable")
   }
 
   val defaultStringColumn: ResColumn<StringRes> = mutableMapOf()
@@ -50,12 +55,12 @@ fun res2xls(inputPath: String, outputPath: String) {
     stringColumns += first
     pluralsColumns += second
     arrayColumns += third
-    // key, value, value-zh-rCN...
-    stringSheet.first().createCell(index + 1).setCellValue(folderName)
-    // key, quantity, value, value-zh-rCN...
-    pluralsSheet.first().createCell(index + 2).setCellValue(folderName)
-    // key, value, value-zh-rCN...
-    arraySheet.first().createCell(index + 1).setCellValue(folderName)
+    // key, translatable, value, value-zh-rCN...
+    stringSheet.first().createCell(index + 2).setCellValue(folderName)
+    // key, translatable, quantity, value, value-zh-rCN...
+    pluralsSheet.first().createCell(index + 3).setCellValue(folderName)
+    // key, translatable, value, value-zh-rCN...
+    arraySheet.first().createCell(index + 2).setCellValue(folderName)
   }
 
   stringColumns.forEachIndexed { columnIndex, column ->
@@ -64,9 +69,12 @@ fun res2xls(inputPath: String, outputPath: String) {
       if (columnIndex == 0) {
         val key = stringRes.name
         check(key.isNotEmpty()) { "Default string res keys can't be null" }
-        stringSheet.createRow(sheetRowIndex).createCell(0).setCellValue(key)
+        stringSheet.createRow(sheetRowIndex).also {
+          it.createCell(0).setCellValue(key)
+          it.createCell(1).setCellValue(if (stringRes.translatable) "" else "false")
+        }
       }
-      stringSheet.getRow(sheetRowIndex).createCell(columnIndex + 1)
+      stringSheet.getRow(sheetRowIndex).createCell(columnIndex + 2)
         .setCellValue(stringRes.value)
     }
   }
@@ -83,15 +91,17 @@ fun res2xls(inputPath: String, outputPath: String) {
           // Write key only once for a plurals res.
           if (i == start) {
             row.createCell(0).setCellValue(pluralsRes.name)
+            row.createCell(1).setCellValue(if (pluralsRes.translatable) "" else "false")
           } else {
             row.createCell(0).setCellValue("")
+            row.createCell(1).setCellValue("")
           }
           val quantity = pluralsValues.entries.toList()[i - start]
-          row.createCell(1).setCellValue(quantity.key)
-          row.createCell(2).setCellValue(quantity.value)
+          row.createCell(2).setCellValue(quantity.key)
+          row.createCell(3).setCellValue(quantity.value)
         } else {
           val value = pluralsValues.values.toList()[i - start]
-          row.createCell(columnIndex + 2).setCellValue(value)
+          row.createCell(columnIndex + 3).setCellValue(value)
         }
       }
     }
@@ -111,13 +121,15 @@ fun res2xls(inputPath: String, outputPath: String) {
           // Write key only once for an array res.
           if (i == start) {
             row.createCell(0).setCellValue(arrayRes.name)
+            row.createCell(1).setCellValue(if (arrayRes.translatable) "" else "false")
           } else {
             row.createCell(0).setCellValue("")
+            row.createCell(1).setCellValue("")
           }
-          row.createCell(1).setCellValue(arrayValues[i - start])
+          row.createCell(2).setCellValue(arrayValues[i - start])
         } else {
           val value = arrayValues[i - start]
-          row.createCell(columnIndex + 1).setCellValue(value)
+          row.createCell(columnIndex + 2).setCellValue(value)
         }
       }
       lastArrayIndex = end - 1
@@ -132,19 +144,20 @@ fun res2xls(inputPath: String, outputPath: String) {
   outputInfo("$SUCCESS_OUTPUT ${path.normalize()}")
 }
 
-internal fun Element.toStringResOrNull(): StringRes? {
+internal fun Element.toStringResOrNull(translatable: Boolean): StringRes? {
   if (name != "string") return null
   val key = getAttributeValue("name") ?: return null
   return StringRes(
     name = key,
+    translatable = translatable,
     value = text,
   )
 }
 
-internal fun Element.toPluralsResOrNull(): PluralsRes? {
+internal fun Element.toPluralsResOrNull(translatable: Boolean): PluralsRes? {
   if (name != "plurals") return null
   val key = getAttributeValue("name") ?: return null
-  val pluralsRes = PluralsRes(key)
+  val pluralsRes = PluralsRes(key, translatable)
   children.forEach {
     val quantity = it.getAttributeValue("quantity") ?: return@forEach
     pluralsRes.values[quantity] = it.text
@@ -152,16 +165,16 @@ internal fun Element.toPluralsResOrNull(): PluralsRes? {
   return pluralsRes
 }
 
-internal fun Element.toArrayResOrNull(): ArrayRes? {
+internal fun Element.toArrayResOrNull(translatable: Boolean): ArrayRes? {
   if (name != "array" && name != "string-array") return null
   val key = getAttributeValue("name") ?: return null
   val items = children.map { it.text }
-  return ArrayRes(key, items)
+  return ArrayRes(key, translatable, items)
 }
 
-internal fun Element.toTransResOrNull(): TranslatableRes? {
-  if (getAttributeValue("translatable") == "false") return null
-  return toStringResOrNull() ?: toPluralsResOrNull() ?: toArrayResOrNull()
+internal fun Element.toTextResOrNull(): TextRes? {
+  val translatable = getAttributeValue("translatable") != "false"
+  return toStringResOrNull(translatable) ?: toPluralsResOrNull(translatable) ?: toArrayResOrNull(translatable)
 }
 
 internal fun parseResFiles(resRoot: String, resFile: String = "strings.xml"): Sequence<Path> {
@@ -179,7 +192,7 @@ private fun fillNewColumn(
   arrayColumn: ResColumn<ArrayRes>,
 ): Triple<ResColumn<StringRes>, ResColumn<PluralsRes>, ResColumn<ArrayRes>> {
   elements.forEach { element ->
-    val res = element.toTransResOrNull() ?: return@forEach
+    val res = element.toTextResOrNull() ?: return@forEach
     when (res) {
       is StringRes -> {
         if (fillDefault || stringColumn.containsKey(res.name)) {

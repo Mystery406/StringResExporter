@@ -37,12 +37,13 @@ internal fun writeStrings(workbook: Workbook, outputPath: String) {
   stringSheet.rowIterator().asSequence().drop(1).forEach { row ->
     if (row.isEmpty()) return@forEach
     val key = row.getCell(0).stringValue
-    row.cellIterator().asSequence().drop(1).forEachIndexed { index, cell ->
-      val folderName = stringSheet.getRow(0).getCell(index + 1).stringValue
+    val translatable = row.getCell(1).stringValue != "false"
+    row.cellIterator().asSequence().drop(2).forEachIndexed { index, cell ->
+      val folderName = stringSheet.getRow(0).getCell(index + 2).stringValue
       val value = cell.stringValue
       stringResMap.getOrPut(folderName) {
         mutableListOf()
-      }.add(StringRes(key, value))
+      }.add(StringRes(key, translatable, value))
     }
   }
 
@@ -53,6 +54,9 @@ internal fun writeStrings(workbook: Workbook, outputPath: String) {
       .map {
         Element("string").apply {
           setAttribute("name", it.name)
+          if (!it.translatable) {
+            setAttribute("translatable", "false")
+          }
           text = it.value
         }
       }
@@ -77,12 +81,13 @@ internal fun writePlurals(workbook: Workbook, outputPath: String) {
 
   pluralsSheet.rowIterator().asSequence().drop(1).forEachIndexed { rowIndex, row ->
     if (row.isEmpty()) return@forEachIndexed
-    row.cellIterator().asSequence().drop(2).forEachIndexed { index, cell ->
-      val folderName = pluralsSheet.getRow(0).getCell(index + 2).stringValue
-      val quantity = row.getCell(1).stringValue
+    row.cellIterator().asSequence().drop(3).forEachIndexed { index, cell ->
+      val folderName = pluralsSheet.getRow(0).getCell(index + 3).stringValue
+      val quantity = row.getCell(2).stringValue
       if (rowIndex % 6 == 0) {
         val key = row.getCell(0).stringValue
-        val pluralsRes = PluralsRes(key).apply {
+        val translatable = row.getCell(1).stringValue != "false"
+        val pluralsRes = PluralsRes(key, translatable).apply {
           values[quantity] = cell.stringValue
         }
         pluralsResMap.getOrPut(folderName) {
@@ -110,6 +115,9 @@ internal fun writePlurals(workbook: Workbook, outputPath: String) {
           .toList()
         if (elements.isEmpty()) return@res
         setAttribute("name", pluralsRes.name)
+        if (!pluralsRes.translatable) {
+          setAttribute("translatable", "false")
+        }
         addContent(elements)
       }
       rootElement.addContent(pluralsElement)
@@ -134,8 +142,9 @@ internal fun writeArray(workbook: Workbook, outputPath: String) {
   arraySheet.rowIterator().asSequence().drop(1).forEach { row ->
     if (row.isEmpty()) return@forEach
     val key = row.getCell(0).stringValue
-    row.cellIterator().asSequence().drop(1).forEachIndexed { index, cell ->
-      val folderName = arraySheet.getRow(0).getCell(index + 1).stringValue
+    val translatable = row.getCell(1).stringValue != "false"
+    row.cellIterator().asSequence().drop(2).forEachIndexed { index, cell ->
+      val folderName = arraySheet.getRow(0).getCell(index + 2).stringValue
       val value = cell.stringValue
       val arrayList = arrayResMap.getOrPut(folderName) {
         mutableListOf()
@@ -143,7 +152,7 @@ internal fun writeArray(workbook: Workbook, outputPath: String) {
       if (key.isEmpty()) {
         arrayList.last().values.mutate() += value
       } else {
-        arrayList.add(ArrayRes(key, mutableListOf(value)))
+        arrayList.add(ArrayRes(key, translatable, mutableListOf(value)))
       }
     }
   }
